@@ -102,8 +102,3 @@ resource "aws_eip" "nat" {
 }
 
 
-# create ecr repo 
-resource "aws_ecr_repository" "tumor_prediction_repo" {
-    name = "tumor-prediction-repo"
-}
-

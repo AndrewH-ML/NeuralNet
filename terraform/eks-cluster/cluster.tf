@@ -89,49 +89,89 @@ resource "aws_security_group" "worker_sg" {
     }
 }
 
-
-# Allow outbound HTTPS from control plane to worker nodes
-resource "aws_vpc_security_group_ingress_rule" "allow_worker_traffic_ipv4" {
-    security_group_id = aws_security_group.eks_cluster_sg.id
-    referenced_security_group_id = aws_security_group.worker_sg
-    from_port         = 443
-    to_port           = 443
+# allows api access 
+# temporarily set to accepting traffic from everywhere
+resource "aws_vpc_security_group_ingress_rule" "primary_api_ingress" {
+    security_group_id = module.eks.cluster_primary_security_group_id
+    from_port         = 6443
+    to_port           = 6443
     ip_protocol       = "tcp"
+    cidr_ipv4         = "0.0.0.0/0"
 }
 
-
-
-# Allow inbound HTTPS traffic from EKS control plane to worker nodes
-resource "aws_vpc_security_group_ingress_rule" "worker_https_ingress" {
-    security_group_id            = aws_security_group.worker_sg.id
-    referenced_security_group_id = aws_security_group.eks_cluster_sg.id  
-    from_port                    = 443
-    to_port                      = 443
-    ip_protocol                   = "tcp"
-}
-
-# Allow outbound traffic to worker nodes on port 10250
-# Allow all traffic between worker nodes
-resource "aws_vpc_security_group_ingress_rule" "worker_internal_traffic" {
-    security_group_id            = aws_security_group.worker_sg.id
-    referenced_security_group_id = aws_security_group.worker_sg.id  
-    from_port                    = 1024
-    to_port                      = 65535
-    ip_protocol                  = "tcp"  
-}
-
-# Allows traffic from alb to worker on port 30080
-resource "aws_vpc_security_group_ingress_rule" "worker_allow_alb_ingress" {
-    security_group_id            = aws_security_group.worker_sg.id
-    referenced_security_group_id = aws_security_group.alb_sg.id
-    from_port                    = 30080
-    to_port                      = 30080
+resource "aws_vpc_security_group_ingress_rule" "primary_kubelet_ingress" {
+    security_group_id = aws_security_group.eks_cluster_sg.id
+    referenced_security_group_id = aws_security_group.eks_cluster_sg.id
+    from_port                    = 2379
+    to_port                      = 2380
     ip_protocol                  = "tcp"
 }
-# Allow all outbound traffic (IPv4)
-resource "aws_vpc_security_group_egress_rule" "worker_allow_all_egress" {
-    security_group_id = aws_security_group.worker_sg.id
-    cidr_ipv4         = "0.0.0.0/0"
-    ip_protocol       = "-1" 
+
+# opens port 10250 on worker nodes for traffic from control plane  
+resource "aws_vpc_security_group_ingress_rule" "worker_kubelet_api_ingress" {
+    security_group_id            = aws_security_group.worker_sg.id
+    referenced_security_group_id = aws_security_group.eks_cluster_sg.id
+    from_port                    = 10250
+    to_port                      = 10250
+    ip_protocol                  = "tcp"
 }
 
+# Allow outbound traffic on port 10250 to worker nodes
+resource "aws_vpc_security_group_egress_rule" "control_plane_to_worker_kubelet" {
+    security_group_id            = aws_security_group.eks_cluster_sg.id
+    referenced_security_group_id = aws_security_group.worker_sg.id
+    from_port                    = 10250
+    to_port                      = 10250
+    ip_protocol                  = "tcp"
+}
+
+# used internally for kube-controller-manager
+resource "aws_vpc_security_group_ingress_rule" "control_plane_10257_ingress" {
+    security_group_id            = aws_security_group.eks_cluster_sg.id
+    referenced_security_group_id = aws_security_group.eks_cluster_sg.id
+    from_port                    = 10257
+    to_port                      = 10257
+    ip_protocol                  = "tcp"
+}
+
+# used internally for kube-scheduler
+resource "aws_vpc_security_group_ingress_rule" "control_plane_10259_ingress" {
+    security_group_id            = aws_security_group.eks_cluster_sg.id
+    referenced_security_group_id = aws_security_group.eks_cluster_sg.id
+    from_port                    = 10259
+    to_port                      = 10259
+    ip_protocol                  = "tcp"
+}
+
+# used by worker node and alb 
+resource "aws_vpc_security_group_ingress_rule" "worker_kube_proxy_ingress" {
+  security_group_id            = aws_security_group.worker_sg.id
+  referenced_security_group_id = aws_security_group.worker_sg.id
+  from_port                    = 10256
+  to_port                      = 10256
+  ip_protocol                  = "tcp"
+}
+
+resource "aws_vpc_security_group_egress_rule" "worker_to_control_plane_https" {
+    security_group_id            = aws_security_group.worker_sg.id
+    referenced_security_group_id = aws_security_group.eks_cluster_sg.id
+    from_port                    = 443
+    to_port                      = 443
+    ip_protocol                  = "tcp"
+}
+
+resource "aws_vpc_security_group_egress_rule" "worker_dns_udp" {
+    security_group_id = aws_security_group.worker_sg.id
+    from_port         = 53
+    to_port           = 53
+    ip_protocol       = "udp"
+    cidr_ipv4         = "192.168.0.2/32"
+}
+
+resource "aws_vpc_security_group_egress_rule" "worker_dns_tcp" {
+    security_group_id = aws_security_group.worker_sg.id
+    from_port         = 53
+    to_port           = 53
+    ip_protocol       = "tcp"
+    cidr_ipv4         = "192.168.0.2/32"
+}

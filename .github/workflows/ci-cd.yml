@@ -2,7 +2,7 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: [ master ]
+    branches: [ security ]
 
 jobs:
   build-test-deploy:
@@ -107,6 +107,17 @@ jobs:
       - name: Test kubectl connection
         run: |
           kubectl get nodes
+
+      # Step X: Test for existing namespace and apply if it doesn't exist
+      - name: Test and Apply Namespace
+        run: |
+          if ! kubectl get namespace tumor-prediction-namespace; then
+            echo "Namespace does not exist. Creating namespace..."
+            kubectl apply -f terraform/k8s-resources/kubernetes/namespace.yaml
+          else
+            echo "Namespace already exists. No changes made."
+          fi
+
 
       # Step 16: Test for existing service and apply
       - name: Test and Deploy service
